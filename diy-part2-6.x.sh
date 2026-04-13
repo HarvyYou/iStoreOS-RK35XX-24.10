@@ -16,6 +16,9 @@ sed -i "s/:443/:4443/g" package/network/services/uhttpd/files/uhttpd.config
 cp -a $GITHUB_WORKSPACE/configfiles/etc/* package/base-files/files/etc/
 # ls package/base-files/files/etc/
 
+# 默认 LAN IPv4（GitHub Actions 通过 ISTOREOS_LAN_IP 传入；本地可 export 后编译）
+bash "$GITHUB_WORKSPACE/configfiles/scripts/install-lan-uci-default.sh"
+
 # Panther X2 (RK3566): device tree + image recipe + firmware + RK3566-specific init
 cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3568/rk3566-panther-x2.dts target/linux/rockchip/dts/rk3568/
 if ! grep -q "define Device/panther_x2" target/linux/rockchip/image/legacy.mk 2>/dev/null; then

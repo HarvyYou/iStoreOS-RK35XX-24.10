@@ -15,6 +15,10 @@ sed -i "s/:80/:81/g" package/network/services/uhttpd/files/uhttpd.config
 sed -i "s/:443/:4443/g" package/network/services/uhttpd/files/uhttpd.config
 cp -a $GITHUB_WORKSPACE/configfiles/etc/* package/base-files/files/etc/
 # ls package/base-files/files/etc/
+
+# 默认 LAN IPv4（GitHub Actions 通过 ISTOREOS_LAN_IP 传入；本地可 export 后编译）
+bash "$GITHUB_WORKSPACE/configfiles/scripts/install-lan-uci-default.sh"
+
 echo "CONFIG_PACKAGE_nginx=y
 CONFIG_PACKAGE_nginx-ssl=y
 CONFIG_PACKAGE_nginx-ssl-util=y

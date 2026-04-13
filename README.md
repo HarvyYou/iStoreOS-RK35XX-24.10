@@ -10,7 +10,7 @@
 
 ## 默认配置
 
-- IP: `http://192.168.100.1` or `http://iStoreOS.lan/`
+- IP: 默认 `http://192.168.100.1` 或 `http://iStoreOS.lan/`（见下节 **编译时指定 LAN 默认 IP**）
 - 用户名: `root`
 - 密码: `password`
 - 如果设备只有一个网口，则此网口就是 `LAN` , 如果大于一个网口, 默认第一个网口是 `WAN` 口, 其它都是 `LAN`
@@ -20,6 +20,26 @@
 - 请把要加入的插件配置项填写在仓库 “configfiles/config_data-6.x.txt” 文件里面，假如你直接填写到 “armv8/.config” 文件里面绝对会丢你新加的配置项，因为每天会定时执行同步文件 “Sync Files” 工作流会自动更新.config为istoreos官方最新的配置文件。
 - 自行定制时需要注意这几点：假如你禁用了 “Sync Files” 工作流的话，那插件配置项就要填写到 “armv8/.config” 文件里面才行，反之你没禁用 “Sync Files” 工作流的话，那插件配置项就要填写到 “configfiles/config_data-6.x.txt” 文件里面才行。
 - 使用此仓库必须设置机密token，Actions云编译固件时需要用到，其他人无法看到的（通常在仓库设置里面，严禁在仓库可视代码中填写，否则后果自负），机密键名为 `ACCESS_TOKEN`
+
+### 编译时指定 LAN 默认 IP
+
+固件首次启动后 **LAN 口的默认 IPv4** 在构建阶段写入（通过 `package/base-files/files/etc/uci-defaults/zzz-istoreos-lan-ip`，首次开机执行 `uci set network.lan.ipaddr`）。未指定时与官方习惯一致，为 **`192.168.100.1`**。
+
+**GitHub Actions 手动运行工作流**
+
+1. 打开 **Actions**，选择 **Build iStore OS 6.x**（ARMv8/RK35xx）或 **Build iStore OS X86**（x86）。
+2. 点击 **Run workflow**，在 **lan_ip** 中填写期望的 IPv4，例如 `192.168.50.1`（留空或未填时使用默认 `192.168.100.1`，与输入项默认值一致）。
+3. 开始运行。Release 说明中的「管理地址」会与本次填写一致。
+
+**定时任务（schedule）或未使用 workflow_dispatch 的触发方式**：不会传入 `lan_ip`，构建时使用 **`192.168.100.1`**。
+
+**本地命令行编译**（在 `openwrt` 目录执行 `diy-part2` 之前导出环境变量即可）：
+
+```sh
+export ISTOREOS_LAN_IP=192.168.50.1
+```
+
+实现脚本：`configfiles/scripts/install-lan-uci-default.sh`（由 `diy-part2-6.x.sh` 与 `diy-part2-6.x-x86.sh` 调用）。
 
 ## Panther X2（RK3566）支持说明
 
