@@ -16,6 +16,21 @@ sed -i "s/:443/:4443/g" package/network/services/uhttpd/files/uhttpd.config
 cp -a $GITHUB_WORKSPACE/configfiles/etc/* package/base-files/files/etc/
 # ls package/base-files/files/etc/
 
+# Panther X2 (RK3566): device tree + image recipe + firmware + RK3566-specific init
+cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3568/rk3566-panther-x2.dts target/linux/rockchip/dts/rk3568/
+if ! grep -q "define Device/panther_x2" target/linux/rockchip/image/legacy.mk 2>/dev/null; then
+	sed -i '/^TARGET_DEVICES += firefly_station-m2$/r '"$GITHUB_WORKSPACE"'/configfiles/patches/rockchip-armv8-panther-x2-legacy.mk.fragment' target/linux/rockchip/image/legacy.mk
+fi
+mkdir -p package/firmware
+cp -a $GITHUB_WORKSPACE/configfiles/packages/panther-x2-firmware package/firmware/
+cp -f $GITHUB_WORKSPACE/configfiles/httpubus package/base-files/files/etc/init.d/httpubus
+cp -f $GITHUB_WORKSPACE/configfiles/ubus-examine.sh package/base-files/files/bin/ubus-examine.sh
+cp -f $GITHUB_WORKSPACE/configfiles/opwifi package/base-files/files/etc/init.d/opwifi
+chmod 755 package/base-files/files/etc/init.d/httpubus package/base-files/files/etc/init.d/opwifi
+chmod 755 package/base-files/files/bin/ubus-examine.sh
+mkdir -p package/base-files/files/etc/rc.d
+ln -sf ../init.d/httpubus package/base-files/files/etc/rc.d/S99httpubus
+ln -sf ../init.d/opwifi package/base-files/files/etc/rc.d/S99opwifi
 
 # 追加自定义内核配置项
 echo "CONFIG_PSI=y

@@ -1,5 +1,8 @@
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_xunlong_orangepi-5-plus=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_radxa_rock-5t=y
+CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_panther_x2=y
+
+CONFIG_PACKAGE_brcmfmac-firmware-panther-x2=y
 
 CONFIG_PACKAGE_lm-sensors=y
 CONFIG_PACKAGE_lm-sensors-detect=y
