@@ -9,6 +9,17 @@ on:
         required: false
         default: '192.168.100.1'
         type: string
+      target_device:
+        description: '选择要编译的目标设备（留空则编译所有设备）'
+        required: false
+        default: ''
+        type: choice
+        options:
+        - ''
+        - panther_x2
+        - orangepi-5-plus
+        - rock-5t
+        - all
   schedule:
    - cron: 0 16 * * *
 
@@ -64,6 +75,27 @@ jobs:
         if [ -z "$LAN_IP" ]; then LAN_IP='192.168.100.1'; fi
         echo "ISTOREOS_LAN_IP=$LAN_IP" >> $GITHUB_ENV
         echo "ISTOREOS_LAN_IP=$LAN_IP (baked into firmware via uci-defaults)"
+
+    - name: 根据设备选择配置编译
+      run: |
+        DEVICE="${{ github.event.inputs.target_device }}"
+        CONFIG_FILE="${{ matrix.ARCHITECTURE }}/config_data-6.x.txt"
+        
+        echo "目标设备: ${DEVICE:-all}"
+        
+        if [ -n "$DEVICE" ] && [ "$DEVICE" != "all" ]; then
+          echo "配置为只编译设备: $DEVICE"
+          # 复制对应设备的配置文件（预先准备好的）
+          cp "${{ matrix.ARCHITECTURE }}/config_data-6.x.$DEVICE.txt" "$CONFIG_FILE"
+        else
+          echo "配置为编译所有设备"
+          # 使用默认的all设备配置
+          cp "${{ matrix.ARCHITECTURE }}/config_data-6.x.txt" "$CONFIG_FILE"
+        fi
+        
+        echo "=== 使用的设备配置文件 ==="
+        cat "$CONFIG_FILE"
+        echo "=========================="
 
     - name: 检查服务器配置
       run: |
