@@ -4,29 +4,6 @@ on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
-      target:
-        description: '选择要编译的设备机型（多选，不选则编译全部）'
-        required: false
-        type: choice
-        multiple: true
-        options:
-          # --- RK33xx ---
-          - friendlyarm_nanopi-r2s
-          - friendlyarm_nanopi-r4s
-          - friendlyarm_nanopi-r4se
-          - radxa_rock-pi
-          - pine64_rockpro64
-          # --- ARMv8/RK35xx ---
-          - panther_x2
-          - hinlink_opc-h6xk
-          - hinlink_h88k
-          - friendlyarm_nanopi-r5s
-          - friendlyarm_nanopi-r6s
-          - fastrhino_r6xs
-          - firefly_station-p2
-          - lyt_t68m
-          - xunlong_orangepi-5-plus
-          - radxa_rock-5t
       lan_ip:
         description: '固件首次启动后 LAN 口默认 IPv4（例如 192.168.50.1）'
         required: false
@@ -183,23 +160,9 @@ jobs:
       id: compile
       run: |
         cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-        TARGETS='${{ github.event.inputs.target }}'
-        if [ -z "$TARGETS" ]; then
-          # 未选择设备，全量编译
-          echo -e "$(nproc) thread compile (all targets)"
-          make -j$(nproc) || make -j1 || make -j1 V=s
-        else
-          # 按选中的设备逐一编译
-          echo "$TARGETS" | tr ',' '\n' | while read -r profile; do
-            [ -z "$profile" ] && continue
-            echo "=========================================="
-            echo " Compiling target: $profile"
-            echo "=========================================="
-            make image PROFILE="$profile" -j$(nproc) || make image PROFILE="$profile" -j1 V=s
-          done
-        fi
         echo "status=success" >> ${GITHUB_OUTPUT}
 
     - name: 检查磁盘空间
