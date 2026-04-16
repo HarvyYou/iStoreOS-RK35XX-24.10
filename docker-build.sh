@@ -12,6 +12,10 @@
 #
 #  环境变量:
 #    LAN_IP=192.168.50.1 ./docker-build.sh   # 自定义 LAN 默认 IP
+#
+#  说明（macOS 用户必读）:
+#    OpenWrt 要求大小写敏感文件系统。本脚本将源码放在容器内部（Linux FS），
+#    仅将配置文件和 DIY 脚本挂载进去，彻底解决 macOS 的 case-insensitive 问题。
 #================================================================================
 
 set -euo pipefail
@@ -19,7 +23,7 @@ set -euo pipefail
 # ======================== 配置区 ========================
 IMAGE_NAME="istoreos-builder"
 CONTAINER_NAME="istoreos-build"
-WORKDIR="/work"
+VOLUME_NAME="istoreos-openwrt-src"     # 源码持久化卷名（容器内 Linux FS，大小写敏感）
 REPO_URL="https://github.com/HarvyYou/istoreos"
 REPO_BRANCH="istoreos-24.10"
 ARCH="armv8"
@@ -28,12 +32,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # =======================================================
 
 # 颜色输出
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-# 检查依赖
 check_prereq() {
     command -v docker >/dev/null 2>&1 || error "请先安装 Docker: https://www.docker.com/products/docker-desktop"
     docker info >/dev/null 2>&1 || error "Docker 未运行，请启动 Docker Desktop"
@@ -51,54 +54,71 @@ prepare_image() {
         docker pull ubuntu:22.04
     fi
 
-    info "首次使用，正在创建编译环境镜像（约 5-10 分钟）..."
+    info "首次使用，正在创建编译环境镜像..."
     docker build --no-cache -t "${IMAGE_NAME}:latest" -f "${SCRIPT_DIR}/Dockerfile.builder" "${SCRIPT_DIR}/"
     info "编译环境镜像创建完成 ✓"
 }
 
+# 创建/获取源码持久化卷
+prepare_volume() {
+    if docker volume inspect "${VOLUME_NAME}" &>/dev/null; then
+        return
+    fi
+    info "创建源码持久化卷 ${VOLUME_NAME}"
+    docker volume create "${VOLUME_NAME}" >/dev/null
+}
+
 # 在容器内执行命令的通用函数
+# 关键：openwrt 源码在 /src（Docker Volume, Linux 大小写敏感FS）
+#       项目配置文件挂载到 /work（宿主机目录）
 docker_run() {
     docker run --rm -it \
-        -e "GITHUB_WORKSPACE=${WORKDIR}" \
+        -e "GITHUB_WORKSPACE=/work" \
         -e "ISTOREOS_LAN_IP=${LAN_IP}" \
-        -v "${SCRIPT_DIR}:${WORKDIR}" \
-        -w "${WORKDIR}" \
+        -v "${VOLUME_NAME}:/src" \
+        -v "${SCRIPT_DIR}:/work" \
+        -w "/src/openwrt" \
         "${IMAGE_NAME}:latest" \
         bash -lc "$1"
 }
 
-# 初始化源码（克隆 + feeds + 配置）
+# 初始化源码（克隆 + feeds + 配置）—— 全在容器内执行
 init_source() {
-    local src_dir="${SCRIPT_DIR}/openwrt"
+    prepare_volume
 
-    if [ -d "$src_dir/.git" ]; then
-        info "OpenWrt 源码已存在，跳过克隆"
+    # 检查容器内的源码是否已存在
+    local src_exists
+    src_exists=$(docker run --rm -v "${VOLUME_NAME}:/src" ubuntu:22.04 bash -c "[ -d /src/openwrt/.git ] && echo YES || echo NO")
+
+    if [ "$src_exists" = "YES" ]; then
+        info "OpenWrt 源码已存在于容器卷中，跳过克隆"
     else
-        info "正在克隆 iStoreOS 源码 (${REPO_BRANCH}) ..."
-        git clone --depth=1 "$REPO_URL" -b "$REPO_BRANCH" "$src_dir"
+        info "正在容器内克隆 iStoreOS 源码 (${REPO_BRANCH}) ..."
+        docker run --rm -v "${VOLUME_NAME}:/src" "${IMAGE_NAME}:latest" bash -lc "
+            git clone --depth=1 '${REPO_URL}' -b '${REPO_BRANCH}' /src/openwrt
+            echo '✅ 克隆完成'
+        "
     fi
 
     info "初始化 Feeds 和配置..."
     docker_run "
         set -e
-        cd openwrt
 
         # 加载自定义 feeds
-        [ -f ../configfiles/${ARCH}/feeds.conf ] && cp ../configfiles/${ARCH}/feeds.conf ./feeds.conf || true
-        chmod +x ../diy-part1-6.x.sh
-        bash ../diy-part1-6.x.sh
+        [ -f /work/configfiles/${ARCH}/feeds.conf ] && cp /work/configfiles/${ARCH}/feeds.conf ./feeds.conf || true
+        chmod +x /work/diy-part1-6.x.sh
+        bash /work/diy-part1-6.x.sh
 
         # 更新并安装 feeds
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
         # 加载 .config 和 DIY Part 2
-        [ -d ../files ] && mv ../files files 2>/dev/null || true
-        cp ../configfiles/${ARCH}/config_data-6.x.txt .config
-        chmod +x ../diy-part2-6.x.sh
-        export GITHUB_WORKSPACE='${WORKDIR}'
+        cp /work/configfiles/${ARCH}/config_data-6.x.txt .config
+        chmod +x /work/diy-part2-6.x.sh
+        export GITHUB_WORKSPACE=/work
         export ISTOREOS_LAN_IP='${LAN_IP}'
-        bash ../diy-part2-6.x.sh
+        bash /work/diy-part2-6.x.sh
 
         make defconfig
         echo '✅ 源码初始化完成'
@@ -118,20 +138,14 @@ do_build() {
     prepare_image
     init_source
 
-    local cpu_count
-    if command -v nproc &>/dev/null; then
-        cpu_count=$(nproc)
-    elif command -v sysctl &>/dev/null; then
+    local cpu_count=4
+    if command -v sysctl &>/dev/null; then
         cpu_count=$(sysctl -n hw.ncpu 2>/dev/null || echo 4)
-    else
-        cpu_count=4
     fi
     info "使用 ${cpu_count} 核心并行编译..."
-    info ""
 
     docker_run "
         set -e
-        cd openwrt
         echo \"LAN IP: \${ISTOREOS_LAN_IP:-${LAN_IP}}\"
 
         # 下载软件包
@@ -146,33 +160,38 @@ do_build() {
 
         # 输出结果
         echo ''
-        echo '╔════════════════════════════════════════════╗'
-        echo '║              ✅  编译完成！                 ║'
-        echo '╚════════════════════════════════════════════╝'
-        echo ''
+        echo '╔══════════════════════════════════════╗'
+        echo '║          ✅ 编译完成！                ║'
+        echo '╚══════════════════════════════════════╝'
 
         FW_DIR='bin/targets/*/*'
         if ls \$FW_DIR/*.img.gz &>/dev/null; then
+            echo ''
             echo '📦 固件文件:'
-            ls -lh \$FW_DIR/*.img.gz 2>/dev/null | awk '{print \"   \" \$NF \" (\" \$5 \")\"}'
+            ls -lh \$FW_DIR/*.img.gz | awk '{print \"   \" \$NF \" (\" \$5 \")\"}'
             echo ''
             echo '🎯 Panther X2 固件:'
             ls -lh \$FW_DIR/*panther_x2*.img.gz 2>/dev/null || echo '   (未找到 panther_x2 固件)'
         else
-            warn '未在预期位置找到固件文件'
-            echo '尝试搜索...'
+            echo '尝试搜索固件...'
             find bin/targets -name '*.img.gz' -exec ls -lh {} \;
         fi
     "
 
-    local fw_dir="${SCRIPT_DIR}/openwrt/bin/targets"
-    if [ -d "$fw_dir" ] && find "$fw_dir" -name "*.img.gz" &>/dev/null | head -1 | grep -q .; then
+    # 从容器卷复制产物回宿主机（可选，方便直接访问）
+    local out_dir="${SCRIPT_DIR}/firmware_output"
+    mkdir -p "$out_dir"
+    docker run --rm -v "${VOLUME_NAME}:/src" -v "${out_dir}:/out" ubuntu:22.04 bash -c "
+        cp /src/openwrt/bin/targets/*/*/*.img.gz /out/ 2>/dev/null || true
+    "
+
+    if [ "$(ls -A "$out_dir" 2>/dev/null)" ]; then
         echo ""
         info "========================================"
-        info " 📦 固件已生成:"
-        find "$fw_dir" -name "*.img.gz" -exec ls -lh {} \;
+        info " 📦 固件已输出到:"
+        ls -lh "$out_dir"/*.img.gz 2>/dev/null | awk '{print "  ", $NF}'
         info ""
-        info " 固件目录: ${fw_dir}"
+        info " 目录: ${out_dir}/"
         info "========================================"
     fi
 }
@@ -181,23 +200,20 @@ do_build() {
 do_shell() {
     check_prereq
     prepare_image
-
-    # 确保源码目录存在
-    if [ ! -d "${SCRIPT_DIR}/openwrt/.git" ]; then
-        info "尚未克隆源码，先执行一次初始化..."
-        init_source
-    fi
+    prepare_volume
 
     info "进入容器交互式环境..."
-    info "工作目录: openwrt/"
+    info "源码位置: /src/openwrt (Docker Volume, 大小写敏感)"
+    info "配置文件: /work/ (只读挂载)"
     info "(退出后容器自动删除)"
     echo ""
 
     docker run --rm -it \
-        -e "GITHUB_WORKSPACE=${WORKDIR}" \
+        -e "GITHUB_WORKSPACE=/work" \
         -e "ISTOREOS_LAN_IP=${LAN_IP}" \
-        -v "${SCRIPT_DIR}:${WORKDIR}" \
-        -w "${WORKDIR}/openwrt" \
+        -v "${VOLUME_NAME}:/src" \
+        -v "${SCRIPT_DIR}:/work" \
+        -w "/src/openwrt" \
         "${IMAGE_NAME}:latest" \
         bash -li
 }
@@ -218,16 +234,12 @@ do_save() {
 
 # 清理构建产物（保留源码和 dl 缓存）
 do_clean() {
-    local base="${SCRIPT_DIR}/openwrt"
-    info "清理编译产物..."
-
-    for dir in bin build_dir staging_dir logs tmp; do
-        if [ -d "$base/$dir" ]; then
-            rm -rf "$base/$dir"
-            info "  已删除 $dir/"
-        fi
-    done
-    info "清理完成 (dl 缓存和 .config 已保留)"
+    info "清理编译产物（在容器卷中执行）..."
+    docker run --rm -v "${VOLUME_NAME}:/src" ubuntu:22.04 bash -c "
+        cd /src/openwrt
+        rm -rf bin build_dir staging_dir logs tmp 2>/dev/null
+        echo '清理完成 (dl 缓存和 .config 已保留)'
+    "
 }
 
 # 全量重建
@@ -236,19 +248,19 @@ do_rebuild() {
     do_build
 }
 
-# 彻底清除（源码 + 镜像）
+# 彻底清除（源码卷 + 镜像 + 本地产物）
 do_purge() {
     warn "这将删除以下内容:"
-    [ -d "${SCRIPT_DIR}/openwrt" ] && warn "  - ${SCRIPT_DIR}/openwrt/ (全部源码和编译产物)"
+    docker volume inspect "${VOLUME_NAME}" &>/dev/null && warn "  - Docker 卷 ${VOLUME_NAME} (源码)"
     docker image inspect "${IMAGE_NAME}:latest" &>/dev/null && warn "  - Docker 镜像 ${IMAGE_NAME}:latest"
+    [ -d "${SCRIPT_DIR}/firmware_output" ] && warn "  - ${SCRIPT_DIR}/firmware_output/ (本地固件副本)"
     echo ""
     read -p "确认继续? (y/N): " confirm
     [ "$confirm" = "y" ] || [ "$confirm" = "Y" ] || { info "已取消"; return; }
 
-    [ -d "${SCRIPT_DIR}/openwrt" ] && rm -rf "${SCRIPT_DIR}/openwrt" && info "已删除源码目录"
-    if docker image inspect "${IMAGE_NAME}:latest" &>/dev/null; then
-        docker rmi "${IMAGE_NAME}:latest" && info "已删除 Docker 镜像"
-    fi
+    docker volume rm "${VOLUME_NAME}" 2>/dev/null && info "已删除源码卷"
+    docker rmi "${IMAGE_NAME}:latest" 2>/dev/null && info "已删除 Docker 镜像"
+    rm -rf "${SCRIPT_DIR}/firmware_output" 2>/dev/null && info "已删除本地固件副本"
     info "清除完成"
 }
 
@@ -263,17 +275,20 @@ iStoreOS RK35XX Docker 本地编译脚本
   $0 shell            进入容器交互式 Shell 调试
   $0 save             保存当前容器为 Docker 镜像
   $0 clean            清理编译产物（保留源码和下载缓存）
-  $0 purge            彻底删除源码和 Docker 镜像
+  $0 purge            彻底删除源码卷和 Docker 镜像
   $0 help             显示此帮助
 
 环境变量:
   LAN_IP=192.168.50.1 $0    自定义 LAN 口默认 IP
 
+说明 (macOS):
+  源码存储在 Docker Volume 中 (Linux 大小写敏感文件系统)
+  固件编译完成后自动复制到 ./firmware_output/
+
 示例:
   $0                          # 正常编译
   LAN_IP=192.168.50.1 $0     # 自定义 IP 编译
-  $0 shell                   # 进入调试模式（可手动 make）
-  $0 clean && $0             # 清理后重新编译
+  $0 shell                   # 进入调试模式
 EOF
 }
 

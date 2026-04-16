@@ -52,8 +52,8 @@ cp -a $GITHUB_WORKSPACE/configfiles/dts/rk3588/* target/linux/rockchip/dts/rk358
 
 
 # iStoreOS-settings
-git clone --depth=1 -b main https://github.com/xiaomeng9597/istoreos-settings package/default-settings
+[ -d package/default-settings ] || git clone --depth=1 -b main https://github.com/xiaomeng9597/istoreos-settings package/default-settings
 
 
 # 定时限速插件
-git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-app-eqosplus
+[ -d package/luci-app-eqosplus ] || git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-app-eqosplus
