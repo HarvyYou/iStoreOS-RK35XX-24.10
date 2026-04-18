@@ -21,26 +21,31 @@ if [ -z "$Releases_version" ]; then
     Releases_version=$(cat package/base-files/image-config.in | sed -n 's|.*releases/\([^"]*\)".*|\1|p')
 fi
 
-http_value=$(wget -qO- "https://downloads.openwrt.org/releases/${Releases_version}/targets/rockchip/armv8/kmods/")
+echo "[1/5] 正在从 downloads.openwrt.org 获取内核校验码..."
+http_value=$(wget -q --show-progress -O- "https://downloads.openwrt.org/releases/${Releases_version}/targets/rockchip/armv8/kmods/" 2>&1)
 hash_value=$(echo "$http_value" | sed -n 's/^.*-\([0-9a-f]\{32\}\)\/.*/\1/p' | head -1)
 
 if [ -z "$hash_value" ]; then
-    http_value=$(wget -qO- "https://archive.openwrt.org/releases/${Releases_version}/targets/rockchip/armv8/kmods/")
+    echo "[2/5] 正在从 archive.openwrt.org 获取内核校验码..."
+    http_value=$(wget -q --show-progress -O- "https://archive.openwrt.org/releases/${Releases_version}/targets/rockchip/armv8/kmods/" 2>&1)
     hash_value=$(echo "$http_value" | sed -n 's/^.*-\([0-9a-f]\{32\}\)\/.*/\1/p' | head -1)
 fi
 
 if [ -z "$hash_value" ]; then
-    http_value=$(wget -qO- "https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/")
+    echo "[3/5] 正在从 mirrors.tuna.tsinghua.edu.cn 获取内核校验码..."
+    http_value=$(wget -q --show-progress -O- "https://mirrors.tuna.tsinghua.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/" 2>&1)
     hash_value=$(echo "$http_value" | sed -n 's/^.*-\([0-9a-f]\{32\}\)\/.*/\1/p' | head -1)
 fi
 
 if [ -z "$hash_value" ]; then
-    http_value=$(wget -qO- "https://mirrors.cqupt.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/")
+    echo "[4/5] 正在从 mirrors.cqupt.edu.cn 获取内核校验码..."
+    http_value=$(wget -q --show-progress -O- "https://mirrors.cqupt.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/" 2>&1)
     hash_value=$(echo "$http_value" | sed -n 's/^.*-\([0-9a-f]\{32\}\)\/.*/\1/p' | head -1)
 fi
 
 if [ -z "$hash_value" ]; then
-    http_value=$(wget -qO- "https://mirrors.ustc.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/")
+    echo "[5/5] 正在从 mirrors.ustc.edu.cn 获取内核校验码..."
+    http_value=$(wget -q --show-progress -O- "https://mirrors.ustc.edu.cn/openwrt/releases/${Releases_version}/targets/rockchip/armv8/kmods/" 2>&1)
     hash_value=$(echo "$http_value" | sed -n 's/^.*-\([0-9a-f]\{32\}\)\/.*/\1/p' | head -1)
 fi
 
@@ -58,6 +63,6 @@ date_version=$(date +"%Y%m%d%H")
 echo $date_version > version
 
 # 为iStoreOS固件版本加上编译作者
-author="xiaomeng9597"
+author="harvy_you"
 sed -i "s/DISTRIB_DESCRIPTION.*/DISTRIB_DESCRIPTION='%D %V ${date_version} by ${author}'/g" package/base-files/files/etc/openwrt_release
 sed -i "s/OPENWRT_RELEASE.*/OPENWRT_RELEASE=\"%D %V ${date_version} by ${author}\"/g" package/base-files/files/usr/lib/os-release
