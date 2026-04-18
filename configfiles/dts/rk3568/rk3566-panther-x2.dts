@@ -590,7 +590,7 @@
 &uart1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart1m0_xfer &uart1m0_ctsn &uart1m0_rtsn>;
-	status = "okay";
+	status = "disabled";
 	uart-has-rtscts;
 
 	bluetooth {
