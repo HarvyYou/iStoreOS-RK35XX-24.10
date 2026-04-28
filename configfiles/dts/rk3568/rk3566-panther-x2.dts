@@ -551,9 +551,6 @@
 	mmc-hs200-1_8v;
 	supports-emmc;
 	non-removable;
-	/* Fix: add clock properties to resolve "Can't reduce clock below 524MHz" warning */
-	clocks = <&cru HCLK_SDHCI>, <&cru CCLK_SRC_SDHCI>;
-	clock-names = "ciu", "biu";
 	status = "okay";
 };
 
