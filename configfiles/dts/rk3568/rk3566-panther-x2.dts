@@ -2,6 +2,9 @@
 /*
  * Copyright (c) 2023 tdleiyao <tdleiyao@gmail.com>
  * Device tree adapted for iStoreOS 24.10 / Linux 6.6 (armv8 target).
+ * 
+ * Based on Linux 6.6 upstream rk3566.dtsi + Panther X2 board specifics.
+ * Reference: HAOS-CN, ArmSom Sige3 DTS for 6.6 kernel compatibility.
  */
 
 /dts-v1/;
@@ -548,6 +551,9 @@
 	mmc-hs200-1_8v;
 	supports-emmc;
 	non-removable;
+	/* Fix: add clock properties to resolve "Can't reduce clock below 524MHz" warning */
+	clocks = <&cru HCLK_SDHCI>, <&cru CCLK_SRC_SDHCI>;
+	clock-names = "ciu", "biu";
 	status = "okay";
 };
 
@@ -558,6 +564,8 @@
 	cap-sd-highspeed;
 	supports-sd;
 	disable-wp;
+	/* Fix: Panther X2 has no hardware card-detect pin */
+	broken-cd;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc0_bus4 &sdmmc0_clk &sdmmc0_cmd &sdmmc0_det>;
 	vmmc-supply = <&vcc3v3_sd>;
@@ -609,7 +617,8 @@
 };
 
 &uart2 {
-	status = "disabled";
+	/* Keep UART2 enabled for kernel console output (stdout-path = serial2) */
+	status = "okay";
 };
 
 &usb2phy0 {

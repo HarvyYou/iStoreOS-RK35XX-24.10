@@ -36,8 +36,16 @@ ln -sf ../init.d/httpubus package/base-files/files/etc/rc.d/S99httpubus
 ln -sf ../init.d/opwifi package/base-files/files/etc/rc.d/S99opwifi
 
 # 追加自定义内核配置项
+# Fix for rockchip_dmac PM runtime warning and clock subsystem hang
 echo "CONFIG_PSI=y
-CONFIG_KPROBES=y" >> target/linux/rockchip/armv8/config-6.6
+CONFIG_KPROBES=y
+CONFIG_PM=y
+CONFIG_PM_CLK=y
+CONFIG_PM_GENERIC_DOMAINS=y
+CONFIG_PM_GENERIC_DOMAINS_OF=y
+CONFIG_DMADEVICES=y
+CONFIG_PL330_DMA=y
+CONFIG_ROCKCHIP_DMAMUX=y" >> target/linux/rockchip/armv8/config-6.6
 
 
 # 集成CPU性能跑分脚本
